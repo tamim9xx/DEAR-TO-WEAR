@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Profile // DARE TO WEAR</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="container nav-inner">
+            <a href="index.html" class="brand-logo">DARE<span>TO</span>WEAR</a>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="shop.html">Shop Catalog</a></li>
+                <li class="admin-only" style="display:none;"><a href="admin.html">Inventory</a></li>
+                <li class="admin-only" style="display:none;"><a href="dashboard.html">Analytics</a></li>
+                <li><a href="cart.html" class="cart-icon-wrapper">Cart <span class="cart-badge" id="cartBadge">0</span></a></li>
+                <li id="authNavContainer"><a href="login.html">Auth Portal</a></li>
+            </ul>
+        </div>
+    </header>
+
+    <div class="container" style="padding-top:40px;">
+        <h2>User Identity Node</h2>
+        <div id="profileDetails" style="margin: 20px 0;"></div>
+        
+        <h3>Past Transaction History</h3>
+        <br>
+        <div id="userOrders"></div>
+    </div>
+
+    <script type="module">
+        import { auth, db, updateCartBadge, setupAuthUI } from './js/firebase-config.js';
+        import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+        import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+        setupAuthUI();
+        updateCartBadge();
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) {
+                window.location.href = "login.html";
+                return;
+            }
+
+            document.getElementById('profileDetails').innerHTML = `<p style="color:var(--text-muted)">User ID: ${user.uid} (${user.email})</p>`;
+
+            const q = query(collection(db, "orders"), where("userId", "==", user.uid));
+            const snap = await getDocs(q);
+            const container = document.getElementById('userOrders');
+
+            if (snap.empty) {
+                container.innerHTML = `<p style="color:var(--text-muted)">No past order logs recorded.</p>`;
+                return;
+            }
+
+            container.innerHTML = `
+                <table class="custom-table">
+                    <thead><tr><th>Order Ref</th><th>TrxID</th><th>Amount</th><th>Status</th></tr></thead>
+                    <tbody>
+                        ${snap.docs.map(d => {
+                            const o = d.data();
+                            return `
+                                <tr>
+                                    <td>#${d.id.substring(0, 6)}</td>
+                                    <td><code>${o.trxId}</code></td>
+                                    <td>৳ ${parseFloat(o.paidAmount).toFixed(2)}</td>
+                                    <td><span class="badge badge-${o.status.toLowerCase()}">${o.status}</span></td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+        });
+    </script>
+</body>
+</html>
