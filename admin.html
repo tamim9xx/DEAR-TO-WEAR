@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Inventory Manager // DARE TO WEAR</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="container nav-inner">
+            <a href="index.html" class="brand-logo">DARE<span>TO</span>WEAR</a>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="shop.html">Shop Catalog</a></li>
+                <li class="admin-only"><a href="admin.html" class="active">Inventory</a></li>
+                <li class="admin-only"><a href="dashboard.html">Analytics</a></li>
+                <li><a href="cart.html" class="cart-icon-wrapper">Cart <span class="cart-badge" id="cartBadge">0</span></a></li>
+                <li id="authNavContainer"></li>
+            </ul>
+        </div>
+    </header>
+
+    <div class="container" style="padding-top:40px;">
+        <h2>Inventory Management Node</h2>
+        
+        <div style="background:var(--card-bg); border:1px solid var(--card-border); padding:20px; margin:20px 0;">
+            <h3>Add New Drop Listing</h3>
+            <br>
+            <form id="addProductForm">
+                <div style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap:15px;">
+                    <div class="form-group">
+                        <label>Title</label>
+                        <input type="text" id="pTitle" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Price (BDT ৳)</label>
+                        <input type="number" step="0.01" id="pPrice" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Category</label>
+                        <input type="text" id="pCat" class="form-control" placeholder="Outerwear, Tops, etc." required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Sizes (Comma-separated)</label>
+                    <input type="text" id="pSizes" class="form-control" value="S,M,L,XL" required>
+                </div>
+                <div class="form-group">
+                    <label>Image URLs (Comma-separated)</label>
+                    <textarea id="pImages" class="form-control" rows="2" required></textarea>
+                </div>
+                <button type="submit" class="btn btn-gold">Publish Drop to Firestore</button>
+            </form>
+        </div>
+
+        <h3>Active Catalog</h3>
+        <br>
+        <div id="adminProductTable"></div>
+    </div>
+
+    <script type="module">
+        import { auth, db, updateCartBadge, setupAuthUI } from './js/firebase-config.js';
+        import { collection, addDoc, getDocs, deleteDoc, doc, getDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+        setupAuthUI();
+        updateCartBadge();
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) { window.location.href = "login.html"; return; }
+            const uDoc = await getDoc(doc(db, "users", user.uid));
+            if (uDoc.data()?.role !== 'admin') {
+                alert("Admin Access Required");
+                window.location.href = "index.html";
+            } else {
+                loadProducts();
+            }
+        });
+
+        document.getElementById('addProductForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await addDoc(collection(db, "products"), {
+                title: document.getElementById('pTitle').value,
+                price: parseFloat(document.getElementById('pPrice').value),
+                category: document.getElementById('pCat').value,
+                sizes: document.getElementById('pSizes').value,
+                imageUrls: document.getElementById('pImages').value,
+                createdAt: serverTimestamp()
+            });
+            alert("Drop published!");
+            document.getElementById('addProductForm').reset();
+            loadProducts();
+        });
+
+        async function loadProducts() {
+            const snap = await getDocs(collection(db, "products"));
+            const table = document.getElementById('adminProductTable');
+            table.innerHTML = `
+                <table class="custom-table">
+                    <thead><tr><th>Img</th><th>Title</th><th>Category</th><th>Price</th><th>Action</th></tr></thead>
+                    <tbody>
+                        ${snap.docs.map(d => {
+                            const p = d.data();
+                            const img = (p.imageUrls || '').split(',')[0];
+                            return `
+                                <tr>
+                                    <td><img src="${img}" style="width:40px; height:40px; object-fit:cover;"></td>
+                                    <td>${p.title}</td>
+                                    <td>${p.category}</td>
+                                    <td>৳ ${p.price}</td>
+                                    <td><button class="btn btn-danger" style="padding:2px 6px;" onclick="deleteProduct('${d.id}')">Delete</button></td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        window.deleteProduct = async (id) => {
+            if (confirm("Purge product item from Firestore network?")) {
+                await deleteDoc(doc(db, "products", id));
+                loadProducts();
+            }
+        };
+    </script>
+</body>
+</html>
