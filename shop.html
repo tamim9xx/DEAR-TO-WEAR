@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Shop Catalog // DARE TO WEAR</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="container nav-inner">
+            <a href="index.html" class="brand-logo">DARE<span>TO</span>WEAR</a>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="shop.html" class="active">Shop Catalog</a></li>
+                <li class="admin-only" style="display:none;"><a href="admin.html">Inventory</a></li>
+                <li class="admin-only" style="display:none;"><a href="dashboard.html">Analytics</a></li>
+                <li><a href="cart.html" class="cart-icon-wrapper">Cart <span class="cart-badge" id="cartBadge">0</span></a></li>
+                <li id="authNavContainer"><a href="login.html">Auth Portal</a></li>
+            </ul>
+        </div>
+    </header>
+
+    <div class="container" style="padding-top: 40px;">
+        <h2>Storefront Catalog</h2>
+        <div style="display: flex; gap: 15px; margin: 20px 0; flex-wrap: wrap;">
+            <input type="text" id="searchInput" class="form-control" placeholder="Search catalog..." style="flex:2;">
+            <select id="categoryFilter" class="form-control" style="flex:1;">
+                <option value="">All Categories</option>
+            </select>
+        </div>
+
+        <div class="product-grid" id="catalogGrid"></div>
+    </div>
+
+    <script type="module">
+        import { db, getCart, saveCart, updateCartBadge, setupAuthUI } from './js/firebase-config.js';
+        import { collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+        setupAuthUI();
+        updateCartBadge();
+
+        let allProducts = [];
+
+        async function fetchCatalog() {
+            const snap = await getDocs(collection(db, "products"));
+            allProducts = [];
+            const categories = new Set();
+            snap.forEach(d => {
+                const item = { id: d.id, ...d.data() };
+                allProducts.push(item);
+                if (item.category) categories.add(item.category);
+            });
+
+            const select = document.getElementById('categoryFilter');
+            categories.forEach(cat => {
+                select.innerHTML += `<option value="${cat}">${cat}</option>`;
+            });
+
+            renderProducts(allProducts);
+        }
+
+        function renderProducts(list) {
+            const grid = document.getElementById('catalogGrid');
+            grid.innerHTML = '';
+            if (!list.length) {
+                grid.innerHTML = `<p style="color:var(--text-muted)">No items match criteria.</p>`;
+                return;
+            }
+            list.forEach(p => {
+                const images = (p.imageUrls || '').split(',').map(s => s.trim());
+                const sizes = (p.sizes || 'S,M,L').split(',').map(s => s.trim());
+                grid.innerHTML += `
+                    <div class="product-card">
+                        <div class="product-image-container">
+                            <img src="${images[0]}" class="product-image">
+                        </div>
+                        <div class="product-details">
+                            <span style="font-size:0.75rem; color:var(--text-muted);">${p.category}</span>
+                            <h3 style="margin: 5px 0;">${p.title}</h3>
+                            <div class="product-price">৳ ${parseFloat(p.price).toFixed(2)}</div>
+                            <div class="size-selector">
+                                ${sizes.map((s, idx) => `<span class="size-btn ${idx===0?'active':''}" onclick="this.parentElement.querySelectorAll('.size-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active');">${s}</span>`).join('')}
+                            </div>
+                            <button class="btn" onclick="addToCart('${p.id}', '${p.title}', ${p.price}, '${images[0]}', this)">Add To Cart</button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        document.getElementById('searchInput').addEventListener('input', filter);
+        document.getElementById('categoryFilter').addEventListener('change', filter);
+
+        function filter() {
+            const q = document.getElementById('searchInput').value.toLowerCase();
+            const cat = document.getElementById('categoryFilter').value;
+            const filtered = allProducts.filter(p => {
+                const matchesQ = p.title.toLowerCase().includes(q) || p.category.toLowerCase().includes(q);
+                const matchesCat = !cat || p.category === cat;
+                return matchesQ && matchesCat;
+            });
+            renderProducts(filtered);
+        }
+
+        window.addToCart = (id, title, price, image, btnEl) => {
+            const card = btnEl.closest('.product-details');
+            const activeSize = card.querySelector('.size-btn.active')?.innerText || 'M';
+            const cart = getCart();
+            const existingKey = id + '_' + activeSize;
+            
+            const matchIndex = cart.findIndex(i => i.key === existingKey);
+            if (matchIndex > -1) {
+                cart[matchIndex].quantity += 1;
+            } else {
+                cart.push({ key: existingKey, id, title, price, image, size: activeSize, quantity: 1 });
+            }
+            saveCart(cart);
+            alert('Item added to cart!');
+        };
+
+        fetchCatalog();
+    </script>
+</body>
+          </html>
