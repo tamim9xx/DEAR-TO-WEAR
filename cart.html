@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cart & Checkout // DARE TO WEAR</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="container nav-inner">
+            <a href="index.html" class="brand-logo">DARE<span>TO</span>WEAR</a>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="shop.html">Shop Catalog</a></li>
+                <li class="admin-only" style="display:none;"><a href="admin.html">Inventory</a></li>
+                <li class="admin-only" style="display:none;"><a href="dashboard.html">Analytics</a></li>
+                <li><a href="cart.html" class="active cart-icon-wrapper">Cart <span class="cart-badge" id="cartBadge">0</span></a></li>
+                <li id="authNavContainer"><a href="login.html">Auth Portal</a></li>
+            </ul>
+        </div>
+    </header>
+
+    <div class="container" style="padding-top: 40px;">
+        <h2>Your Cyber Cart</h2>
+        <div id="cartView"></div>
+    </div>
+
+    <script type="module">
+        import { db, auth, getCart, saveCart, updateCartBadge, setupAuthUI } from './js/firebase-config.js';
+        import { collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+        setupAuthUI();
+        updateCartBadge();
+
+        function renderCart() {
+            const container = document.getElementById('cartView');
+            const cart = getCart();
+
+            if (!cart.length) {
+                container.innerHTML = `<p style="color:var(--text-muted); padding:30px 0;">Your cart is currently empty.</p><a href="shop.html" class="btn">Browse Shop</a>`;
+                return;
+            }
+
+            const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            const shipping = 120.00;
+            const grandTotal = subtotal + shipping;
+
+            container.innerHTML = `
+                <div style="display:grid; grid-template-columns: 2fr 1fr; gap:30px; margin-top:20px;">
+                    <div>
+                        <table class="custom-table">
+                            <thead>
+                                <tr><th>Item</th><th>Size</th><th>Price</th><th>Qty</th><th>Subtotal</th><th>Remove</th></tr>
+                            </thead>
+                            <tbody>
+                                ${cart.map(i => `
+                                    <tr>
+                                        <td style="display:flex; align-items:center; gap:10px;">
+                                            <img src="${i.image}" style="width:40px; height:40px; object-fit:cover;">
+                                            ${i.title}
+                                        </td>
+                                        <td><span class="badge badge-cyan">${i.size}</span></td>
+                                        <td>৳ ${parseFloat(i.price).toFixed(2)}</td>
+                                        <td>${i.quantity}</td>
+                                        <td>৳ ${(i.price * i.quantity).toFixed(2)}</td>
+                                        <td><button class="btn btn-danger" style="padding:2px 6px;" onclick="removeItem('${i.key}')">X</button></td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div style="background:var(--card-bg); border:1px solid var(--card-border); padding:20px;">
+                        <h3>Order Summary</h3>
+                        <br>
+                        <div style="display:flex; justify-size:space-between; margin-bottom:10px;">
+                            <span>Subtotal:</span><span>৳ ${subtotal.toFixed(2)}</span>
+                        </div>
+                        <div style="display:flex; justify-size:space-between; margin-bottom:10px;">
+                            <span>Shipping:</span><span>৳ ${shipping.toFixed(2)}</span>
+                        </div>
+                        <hr style="border-color:var(--card-border); margin:10px 0;">
+                        <div style="display:flex; justify-content:space-between; font-weight:bold; color:var(--cyan-accent); font-size:1.2rem; margin-bottom:20px;">
+                            <span>Total:</span><span>৳ ${grandTotal.toFixed(2)}</span>
+                        </div>
+
+                        <div style="background:rgba(212,175,55,0.1); border:1px dashed var(--gold-accent); padding:10px; margin-bottom:15px; font-size:0.85rem;">
+                            <strong style="color:var(--gold-accent);">bKash / Nagad Send Money</strong><br>
+                            Account: <strong>01796618012</strong>
+                        </div>
+
+                        <form id="checkoutForm">
+                            <div class="form-group">
+                                <label>Customer Name</label>
+                                <input type="text" id="custName" class="form-control" required>
+                            </div>
+                            <div class="form-group">
+                                <label>WhatsApp Number</label>
+                                <input type="text" id="custWA" class="form-control" placeholder="017XXXXXXXX" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Delivery Address</label>
+                                <textarea id="custAddr" class="form-control" rows="2" required></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Paid Amount (BDT)</label>
+                                <input type="number" id="paidAmt" class="form-control" value="${grandTotal.toFixed(2)}" required>
+                            </div>
+                            <div class="form-group">
+                                <label>TrxID</label>
+                                <input type="text" id="trxId" class="form-control" placeholder="e.g. 9J7A8K2L1" required>
+                            </div>
+                            <button type="submit" class="btn btn-gold" style="width:100%;">Confirm Order</button>
+                        </form>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('checkoutForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const user = auth.currentUser;
+                const orderData = {
+                    userId: user ? user.uid : null,
+                    customerName: document.getElementById('custName').value,
+                    whatsapp: document.getElementById('custWA').value,
+                    address: document.getElementById('custAddr').value,
+                    paidAmount: parseFloat(document.getElementById('paidAmt').value),
+                    trxId: document.getElementById('trxId').value,
+                    items: cart,
+                    status: 'PENDING',
+                    createdAt: serverTimestamp()
+                };
+
+                try {
+                    await addDoc(collection(db, "orders"), orderData);
+                    saveCart([]);
+                    alert("Order submitted to Firestore network!");
+                    window.location.href = user ? "profile.html" : "shop.html";
+                } catch (err) {
+                    alert("Error submitting order: " + err.message);
+                }
+            });
+        }
+
+        window.removeItem = (key) => {
+            let cart = getCart();
+            cart = cart.filter(i => i.key !== key);
+            saveCart(cart);
+            renderCart();
+        };
+
+        renderCart();
+    </script>
+</body>
+  </html>
