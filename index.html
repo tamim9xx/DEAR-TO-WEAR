@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>DARE TO WEAR // Futuristic Streetwear</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="container nav-inner">
+            <a href="index.html" class="brand-logo">DARE<span>TO</span>WEAR</a>
+            <ul class="nav-links">
+                <li><a href="index.html" class="active">Home</a></li>
+                <li><a href="shop.html">Shop Catalog</a></li>
+                <li class="admin-only" style="display:none;"><a href="admin.html">Inventory</a></li>
+                <li class="admin-only" style="display:none;"><a href="dashboard.html">Analytics</a></li>
+                <li>
+                    <a href="cart.html" class="cart-icon-wrapper">
+                        Cart <span class="cart-badge" id="cartBadge">0</span>
+                    </a>
+                </li>
+                <li id="authNavContainer"><a href="login.html">Auth Portal</a></li>
+            </ul>
+        </div>
+    </header>
+
+    <section class="hero">
+        <div class="container">
+            <span class="badge badge-gold">Collection 2026</span>
+            <h1 style="font-size: 3rem; margin: 15px 0;">CYBERPUNK LUXURY STREETWEAR</h1>
+            <p style="color: var(--text-muted); max-width: 500px; margin-bottom: 25px;">Engineered for the high-street darkwear aesthetic. Native Firestore backed drops.</p>
+            <a href="shop.html" class="btn">Explore Drops</a>
+        </div>
+    </section>
+
+    <div class="container" style="padding: 40px 0;">
+        <h2>Fresh Arrivals</h2>
+        <div class="product-grid" id="featuredGrid">
+            <p style="color: var(--text-muted);">Fetching drops from Firestore node...</p>
+        </div>
+    </div>
+
+    <script type="module">
+        import { db, getCart, saveCart, updateCartBadge, setupAuthUI } from './js/firebase-config.js';
+        import { collection, getDocs, limit, query } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+        setupAuthUI();
+        updateCartBadge();
+
+        async function loadFeatured() {
+            const grid = document.getElementById('featuredGrid');
+            try {
+                const snap = await getDocs(query(collection(db, "products"), limit(6)));
+                grid.innerHTML = '';
+                snap.forEach(docSnap => {
+                    const p = docSnap.data();
+                    const id = docSnap.id;
+                    const images = (p.imageUrls || '').split(',').map(s => s.trim());
+                    const sizes = (p.sizes || 'S,M,L').split(',').map(s => s.trim());
+
+                    grid.innerHTML += `
+                        <div class="product-card">
+                            <div class="product-image-container">
+                                <img src="${images[0]}" class="product-image" id="img-${id}">
+                            </div>
+                            <div class="product-details">
+                                <span style="font-size:0.75rem; color:var(--text-muted);">${p.category}</span>
+                                <h3 style="margin: 5px 0;">${p.title}</h3>
+                                <div class="product-price">৳ ${parseFloat(p.price).toFixed(2)}</div>
+                                <div class="size-selector">
+                                    ${sizes.map((s, idx) => `<span class="size-btn ${idx===0?'active':''}" onclick="this.parentElement.querySelectorAll('.size-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active');">${s}</span>`).join('')}
+                                </div>
+                                <button class="btn" onclick="addToCart('${id}', '${p.title}', ${p.price}, '${images[0]}', this)">Add To Cart</button>
+                            </div>
+                        </div>
+                    `;
+                });
+            } catch (err) {
+                grid.innerHTML = `<p style="color:var(--red-alert)">Error loading collection: ${err.message}</p>`;
+            }
+        }
+
+        window.addToCart = (id, title, price, image, btnEl) => {
+            const card = btnEl.closest('.product-details');
+            const activeSize = card.querySelector('.size-btn.active')?.innerText || 'M';
+            const cart = getCart();
+            const existingKey = id + '_' + activeSize;
+            
+            const matchIndex = cart.findIndex(i => i.key === existingKey);
+            if (matchIndex > -1) {
+                cart[matchIndex].quantity += 1;
+            } else {
+                cart.push({ key: existingKey, id, title, price, image, size: activeSize, quantity: 1 });
+            }
+            saveCart(cart);
+            alert('Item synchronized to your Cyber Cart!');
+        };
+
+        loadFeatured();
+    </script>
+</body>
+                                                            </html>
