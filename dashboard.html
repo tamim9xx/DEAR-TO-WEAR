@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Dashboard // DARE TO WEAR</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="container nav-inner">
+            <a href="index.html" class="brand-logo">DARE<span>TO</span>WEAR</a>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="shop.html">Shop Catalog</a></li>
+                <li class="admin-only"><a href="admin.html">Inventory</a></li>
+                <li class="admin-only"><a href="dashboard.html" class="active">Analytics</a></li>
+                <li><a href="cart.html" class="cart-icon-wrapper">Cart <span class="cart-badge" id="cartBadge">0</span></a></li>
+                <li id="authNavContainer"></li>
+            </ul>
+        </div>
+    </header>
+
+    <div class="container" style="padding-top:40px;">
+        <h2>Control Center Analytics</h2>
+        <br>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <span style="color:var(--text-muted); font-size:0.8rem;">TOTAL REVENUE</span>
+                <div class="value" id="totalRev">৳ 0.00</div>
+            </div>
+            <div class="metric-card">
+                <span style="color:var(--text-muted); font-size:0.8rem;">TOTAL ORDERS</span>
+                <div class="value" id="totalOrd">0</div>
+            </div>
+            <div class="metric-card">
+                <span style="color:var(--text-muted); font-size:0.8rem;">PENDING TRX</span>
+                <div class="value" id="pendingOrd" style="color:#FFBF00;">0</div>
+            </div>
+        </div>
+
+        <h3>Order Stream Verification</h3>
+        <br>
+        <div id="adminOrdersTable"></div>
+    </div>
+
+    <script type="module">
+        import { auth, db, updateCartBadge, setupAuthUI } from './js/firebase-config.js';
+        import { collection, getDocs, doc, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+        setupAuthUI();
+        updateCartBadge();
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) { window.location.href = "login.html"; return; }
+            const uDoc = await getDoc(doc(db, "users", user.uid));
+            if (uDoc.data()?.role !== 'admin') {
+                alert("Admin Access Required");
+                window.location.href = "index.html";
+            } else {
+                loadDashboard();
+            }
+        });
+
+        async function loadDashboard() {
+            const snap = await getDocs(collection(db, "orders"));
+            let rev = 0;
+            let count = 0;
+            let pending = 0;
+
+            const ordersArr = [];
+            snap.forEach(d => {
+                const o = { id: d.id, ...d.data() };
+                ordersArr.push(o);
+                count++;
+                if (o.status === 'APPROVED') rev += parseFloat(o.paidAmount || 0);
+                if (o.status === 'PENDING') pending++;
+            });
+
+            document.getElementById('totalRev').innerText = '৳ ' + rev.toFixed(2);
+            document.getElementById('totalOrd').innerText = count;
+            document.getElementById('pendingOrd').innerText = pending;
+
+            const table = document.getElementById('adminOrdersTable');
+            table.innerHTML = `
+                <table class="custom-table">
+                    <thead><tr><th>ID</th><th>Customer / WA</th><th>Address</th><th>Amount</th><th>TrxID</th><th>Status</th><th>Actions</th></tr></thead>
+                    <tbody>
+                        ${ordersArr.map(o => {
+                            const waClean = (o.whatsapp || '').replace(/[^0-9]/g, '');
+                            return `
+                                <tr>
+                                    <td>#${o.id.substring(0,6)}</td>
+                                    <td>
+                                        ${o.customerName}<br>
+                                        <a href="https://wa.me/88${waClean}" target="_blank" style="color:var(--green-success); font-size:0.8rem;">WhatsApp Direct →</a>
+                                    </td>
+                                    <td style="font-size:0.8rem; max-width:200px;">${o.address}</td>
+                                    <td>৳ ${parseFloat(o.paidAmount).toFixed(2)}</td>
+                                    <td><code>${o.trxId}</code></td>
+                                    <td><span class="badge badge-${o.status.toLowerCase()}">${o.status}</span></td>
+                                    <td>
+                                        <button class="btn" style="padding:2px 6px; font-size:0.7rem; color:var(--green-success); border-color:var(--green-success);" onclick="updateStatus('${o.id}', 'APPROVED')">Approve</button>
+                                        <button class="btn btn-danger" style="padding:2px 6px; font-size:0.7rem;" onclick="updateStatus('${o.id}', 'REJECTED')">Reject</button>
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        window.updateStatus = async (id, status) => {
+            await updateDoc(doc(db, "orders", id), { status });
+            loadDashboard();
+        };
+    </script>
+</body>
+</html>
